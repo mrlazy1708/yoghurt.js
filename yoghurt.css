@@ -1,0 +1,145 @@
+:root {
+  --color-outline: #7d7c7c;
+  --color-focused: #9fb7fb;
+  --color-unfocused: #d1d1d1;
+
+  --auxiliary-width: 100vw;
+  --auxiliary-height: 100vh;
+}
+
+/* --------------------------------- yoghurt -------------------------------- */
+
+.yoghurt {
+  display: block;
+  box-sizing: content-box;
+  width: 100%;
+  height: 100%;
+
+  position: absolute;
+  left: 0;
+  top: 0;
+
+  --border-color: var(--color-unfocused);
+
+  background-color: transparent;
+  cursor: all-scroll;
+  outline: none;
+
+  --adjuster-display: none;
+}
+
+.yoghurt::before {
+  content: "";
+
+  display: block;
+  box-sizing: content-box;
+  width: calc(100% - 1px);
+  height: calc(100% - 1px);
+
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-0.5px, -0.5px);
+
+  border: solid 1px var(--border-color);
+}
+
+/* ---------------------------- yoghurt-adjuster ---------------------------- */
+
+div.yoghurt-adjuster {
+  display: var(--adjuster-display);
+  width: 6px;
+  height: 6px;
+
+  transform: translate(-50%, -50%);
+
+  --border-color: var(--color-outline);
+
+  background-color: #ffffff;
+
+  --adjuster-display: unset;
+}
+
+div.yoghurt-adjuster-tl {
+  left: 0%;
+  top: 0%;
+
+  cursor: nwse-resize;
+}
+
+div.yoghurt-adjuster-tm {
+  left: 50%;
+  top: 0%;
+
+  cursor: ns-resize;
+}
+
+div.yoghurt-adjuster-tr {
+  left: 100%;
+  top: 0%;
+
+  cursor: nesw-resize;
+}
+
+div.yoghurt-adjuster-ml {
+  left: 0%;
+  top: 50%;
+
+  cursor: ew-resize;
+}
+
+div.yoghurt-adjuster-mr {
+  left: 100%;
+  top: 50%;
+
+  cursor: ew-resize;
+}
+
+div.yoghurt-adjuster-bl {
+  left: 0%;
+  top: 100%;
+
+  cursor: nesw-resize;
+}
+
+div.yoghurt-adjuster-bm {
+  left: 50%;
+  top: 100%;
+
+  cursor: ns-resize;
+}
+
+div.yoghurt-adjuster-br {
+  left: 100%;
+  top: 100%;
+
+  cursor: nwse-resize;
+}
+
+/* ---------------------------- yoghurt-auxiliary --------------------------- */
+
+div.yoghurt-auxiliary {
+  width: 1px;
+  height: 1px;
+
+  background-color: #d9c869;
+  box-shadow: 0px 0px 2px #d9c869;
+}
+
+div.yoghurt-auxiliary::before {
+  border: none;
+}
+
+div.yoghurt-auxiliary-horizontal {
+  height: var(--auxiliary-height);
+  left: var(--coordinate);
+
+  transform: translateX(-50%);
+}
+
+div.yoghurt-auxiliary-vertical {
+  width: var(--auxiliary-width);
+  top: var(--coordinate);
+
+  transform: translateY(-50%);
+}
