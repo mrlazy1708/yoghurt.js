@@ -1,6 +1,6 @@
 # yoghurt.js
 
-🎨 Tidy & lightweight HTML editor in place. 
+🎨 Tidy & lightweight in-place HTML editor. 
 
 
 
@@ -19,18 +19,6 @@ Object.assign(document.head.appendChild(document.createElement(`link`)), { rel: 
 ```js
 yoghurt.enter() // pass the element as subtree root. default to `document.body`
 ```
-
-
-
-## Usage
-
-- `yoghurt.enter`: 
-
-  Append a `div` to every editable element and manage them (Listening to mouse/keyboard events, ect.)
-
-- `yoghurt.leave`: 
-
-  Remove each additional `div` in the subtree and hand over control
 
 
 
