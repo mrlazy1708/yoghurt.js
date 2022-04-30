@@ -1,18 +1,36 @@
 <html lang="en">
 
 <head>
-    <script src="/yoghurt.js"></script>
     <link rel="stylesheet" href="/yoghurt.css">
+    <script src="/yoghurt.js"></script>
+    <script defer>
+        yoghurt.log = yoghurt.debug = true;
+        window.onload = () => yoghurt.enter();
+    </script>
 </head>
 
 <body>
+    <style>
+        div {
+            position: relative;
+            display: block;
+        }
+    </style>
     <div style="
-        position: absolute;
+        left: 50px;
+        top: 50px;
         width: 100px;
         height: 100px;
-        /* background-color: darksalmon; */
     ">
-        div
+        outer
+        <div style="
+            left: 50px;
+            top: 50px;
+            width: 100px;
+            height: 100px;
+        ">
+            inner
+        </div>
     </div>
 </body>
 

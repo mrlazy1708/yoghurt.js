@@ -9,8 +9,9 @@ setTimeout(() => console.timeEnd(`Yoghurt load `));
 
 var yoghurt = Object.create(window.yoghurt ?? null);
 
+yoghurt.log ??= false;
 yoghurt.debug ??= false;
-yoghurt.magnet ??= 7;
+yoghurt.magnet ??= 7.0;
 
 yoghurt.yoghurts = new Map();
 yoghurt.observer = new MutationObserver((mutations) =>
@@ -32,67 +33,29 @@ window.addEventListener(`load`, (event) => {
 yoghurt.take = function (element) {
   if (!yoghurt.yoghurts.has(element))
     switch (element.tagName) {
-
-      /* ----------------------------- Content Section ---------------------------- */
-      case `SECTION`: case `ARTICLE`: case `MAIN`:
-      case `HEADER`: case `FOOTER`: case `ASIDE`: case `NAV`:
-      case `H1`: case `H2`: case `H3`: case `H4`: case `H5`: case `H6`:
-        return new yoghurt.Yoghurt.Element.Text(element);
-
-      /* ------------------------------ Text Content ------------------------------ */
       case `DIV`:
-      case `DD`: case `DL`: case `DT`:
-      case `LI`: case `OL`: case `UL`: case `MENU`:
-      case `P`: case `PRE`:
-      case `HR`:
-      case `BLOCKQUOTE`:
-      case `FIGURE`: case `FIGCAPTION`:
-        return new yoghurt.Yoghurt.Element.Text(element);
+        return new yoghurt.Type.Yoghurt.Element(element);
 
-      /* ----------------------------- Inline Content ----------------------------- */
-      case `SPAN`:
-      case `A`: case `B`: case `BDI`: case `BDO`: case `EM`: case `I`: case `MARK`: case `Q`: case `S`: case `SMALL`: case `STRONG`: case `SUB`: case `SUP`: case `U`:
-      case `ABBR`: case `ADDRESS`: case `CITE`: case `CODE`: case `DATA`: case `DFN`: case `KBD`: case `TIME`: case `SAMP`: case `VAR`:
-      case `BR`: case `WBR`:
-      case `DEL`: case `INS`:
-      case `RUBY`: case `RP`: case `RT`:
-        return new yoghurt.Yoghurt.Element.Text(element);
-
-      /* ------------------------------ Table Content ----------------------------- */
-      case `TABLE`:
-      case `THEAD`: case `TH`:
-      case `TBODY`: case `TD`: case `TR`: case `COL`: case `COLGROUP`:
-      case `TFOOT`: case `CAPTION`:
-        return new yoghurt.Yoghurt.Element.Text(element);
-
-      default:
-        console.warn(arguments);
-        return null;
+      default: return;
     }
 
-  console.warn(arguments);
+  if (yoghurt.debug) debugger;
   return yoghurt.yoghurts.get(element);
 };
 
 yoghurt.drop = function (element) {
-  if (yoghurt.yoghurts.has(element)) yoghurt.yoghurts.get(element).destructor();
-  else console.warn(arguments);
+  if (yoghurt.yoghurts.has(element))
+    return yoghurt.yoghurts.get(element).destructor();
+
+  if (yoghurt.debug) debugger;
 };
 
-yoghurt.enter = function (element = document.body, filter = null) {
-  const it = document.createNodeIterator(element, NodeFilter.SHOW_ALL, filter);
-  const nodes = new Set((function* () {
-    for (let node = it.nextNode(); node !== null; node = it.nextNode())
-      yield node;
-  })());
-
-  nodes.forEach((node) => yoghurt.take(node));
+yoghurt.enter = function (element = document.body) {
+  element.querySelectorAll(`*`).forEach((node) => yoghurt.take(node));
 };
 
 yoghurt.leave = function (element = document.body) {
-  const it = document.createNodeIterator(element, NodeFilter.SHOW_ALL);
-  for (let node = it.nextNode(); node !== null; node = it.nextNode())
-    yoghurt.drop(node);
+  element.querySelectorAll(`*`).forEach((node) => yoghurt.drop(node));
 };
 
 /* -------------------------------------------------------------------------- */
@@ -101,11 +64,23 @@ yoghurt.leave = function (element = document.body) {
 
 yoghurt.Event = class extends CustomEvent { };
 
-yoghurt.Event.Move = class extends yoghurt.Event {
-  constructor(x, y) {
-    super(`yoghurtmove`, { detail: { x, y } });
+yoghurt.Event.Pick = class extends yoghurt.Event {
+  constructor() {
+    super(`yoghurtpick`);
   }
-};
+}
+
+yoghurt.Event.Drag = class extends yoghurt.Event {
+  constructor(dx, dy) {
+    super(`yoghurtdrag`, { detail: { dx, dy } });
+  }
+}
+
+yoghurt.Event.Drop = class extends yoghurt.Event {
+  constructor(target) {
+    super(`yoghurtdrop`, { detail: { target } });
+  }
+}
 
 yoghurt.Event.Select = class extends yoghurt.Event {
   constructor(selected) {
@@ -114,10 +89,10 @@ yoghurt.Event.Select = class extends yoghurt.Event {
 };
 
 /* -------------------------------------------------------------------------- */
-/*                                    TYPE                                    */
+/*                                    CLASS                                   */
 /* -------------------------------------------------------------------------- */
 
-yoghurt.Yoghurt = class {
+yoghurt.Type = class {
   get(name) {
     return window.getComputedStyle(this.element).getPropertyValue(name);
   }
@@ -145,11 +120,11 @@ yoghurt.Yoghurt = class {
         break;
 
       default:
-        console.error(arguments);
+        if (yoghurt.debug) debugger;
     }
   }
 
-  listen(type, element = this.element) {
+  listen(type, element = this.yoghurt) {
     console.assert(!this.listener.has(type), arguments);
 
     const listener = this[`on${type}`].bind(this);
@@ -158,7 +133,7 @@ yoghurt.Yoghurt = class {
     this.listener.set(type, listener);
   }
 
-  unlisten(type, element = this.element) {
+  unlisten(type, element = this.yoghurt) {
     console.assert(this.listener.has(type), arguments);
 
     const listener = this.listener.get(type);
@@ -171,11 +146,6 @@ yoghurt.Yoghurt = class {
     this.element = element;
     yoghurt.yoghurts.set(element, this);
 
-    this.yoghurt = document.createElement(`div`);
-    this.yoghurt.classList.add(`yoghurt`);
-    this.yoghurt.setAttribute(`draggable`, `true`);
-    this.element.appendChild(this.yoghurt);
-
     this.listener = new Map();
 
     this.status = new Object();
@@ -187,78 +157,166 @@ yoghurt.Yoghurt = class {
     console.assert(this.listener.size === 0);
     delete this.listener;
 
-    this.element.removeChild(this.yoghurt);
-    delete this.yoghurt;
-
     yoghurt.yoghurts.delete(this.element);
     delete this.element;
   }
 };
 
-yoghurt.Yoghurt.Adjuster = class extends yoghurt.Yoghurt {
-  constructor(parent, dir) {
-    super(document.createElement(`div`));
-    this.parent = parent;
+yoghurt.Type.Yoghurt = class extends yoghurt.Type {
+  constructor(element) {
+    super(element);
 
-    this.element.classList.add(`yoghurt`, `yoghurt-adjuster`, `yoghurt-adjuster-${dir}`);
+    this.yoghurt = document.createElement(`div`);
+    this.yoghurt.classList.add(`yoghurt`);
 
-    this.listen(`yoghurtselected`, this.parent.element);
-    this.listen(`yoghurtunselected`, this.parent.element);
+    this.listen(`mousedown`);
+    this.status.mouse = null;
 
-    this.status.shape = null;
+    this.listen(`yoghurtpick`);
+    this.listen(`yoghurtdrag`);
+    this.listen(`yoghurtdrop`);
+    this.status.dragged = false;
   }
 
   destructor() {
-    delete this.parent;
+    this.unlisten(`mousedown`);
 
-    this.unlisten(`yoghurtselected`, this.parent.element);
-    this.unlisten(`yoghurtunselected`, this.parent.element);
+    this.element.removeChild(this.yoghurt);
+    delete this.yoghurt;
 
     super.destructor();
   }
 
   onmousedown(event) {
-    super.onmousedown(event);
+    if (yoghurt.log) console.log(this, event);
 
-    this.status.shape = { x: parseFloat(this.get(`width`)), y: parseFloat(this.get(`height`)) };
+    this.listen(`mousemove`, document);
+    this.listen(`mouseup`, document);
+    this.status.mouse = { x: event.pageX, y: event.pageY };
   }
 
-  onmousemove(event) { }
+  onmousemove(event) {
+    if (yoghurt.log?.verbose) console.log(this, event);
+
+    if (!this.status.dragged)
+      this.yoghurt.dispatchEvent(new yoghurt.Event.Pick());
+
+    const dx = event.pageX - this.status.mouse.x;
+    const dy = event.pageY - this.status.mouse.y;
+    this.yoghurt.dispatchEvent(new yoghurt.Event.Drag(dx, dy));
+  }
 
   onmouseup(event) {
-    super.onmouseup(event);
+    if (yoghurt.log) console.log(this, event);
+
+    this.unlisten(`mousemove`, document);
+    this.unlisten(`mouseup`, document);
+    this.status.mouse = null;
+
+    if (this.status.dragged) {
+      const target = document.elementFromPoint(event.pageX, event.pageY);
+      this.yoghurt.dispatchEvent(new yoghurt.Event.Drop(target));
+    }
+  }
+
+  onyoghurtpick(event) {
+    if (yoghurt.log) console.log(this, event);
+
+    this.status.dragged = true;
+  }
+
+  onyoghurtdrag(event) {
+    if (yoghurt.log?.verbose) console.log(this, event);
+  }
+
+  onyoghurtdrop(event) {
+    if (yoghurt.log) console.log(this, event);
+
+    this.status.dragged = false;
+  }
+}
+
+yoghurt.Type.Yoghurt.Adjuster = class extends yoghurt.Type.Yoghurt {
+  constructor(parent, dir) {
+    super(parent.yoghurt);
+
+    this.parent = parent;
+    this.dir = dir;
+
+    this.yoghurt.classList.add(`yoghurt-adjuster`, `yoghurt-adjuster-${dir}`);
+
+    this.listen(`yoghurtselected`, this.parent.yoghurt);
+    this.listen(`yoghurtunselected`, this.parent.yoghurt);
 
     this.status.shape = null;
+    this.status.fixed = { x: false, y: false };
+  }
+
+  destructor() {
+    this.unlisten(`yoghurtselected`, this.parent.yoghurt);
+    this.unlisten(`yoghurtunselected`, this.parent.yoghurt);
+
+    delete this.parent;
+
+    super.destructor();
+  }
+
+  onyoghurtpick(event) {
+    super.onyoghurtpick(event);
+
+    this.status.shape = { w: parseFloat(this.parent.get(`width`)), h: parseFloat(this.parent.get(`height`)) };
+
+    if (this.dir[1] !== `l`) this.parent.status.locked.x = true;
+    if (this.dir[0] !== `t`) this.parent.status.locked.y = true;
+  }
+
+  onyoghurtdrag(event) {
+    super.onyoghurtdrag(event);
+
+    const rx = { l: -1, m: 0, r: 1 }[this.dir[1]];
+    const ry = { t: -1, m: 0, b: 1 }[this.dir[0]];
+
+    const w = this.status.shape.w + event.detail.dx * rx;
+    const h = this.status.shape.h + event.detail.dy * ry;
+    if (!this.status.fixed.x) this.parent.set(`width`, w);
+    if (!this.status.fixed.y) this.parent.set(`height`, h);
+  }
+
+  onyoghurtdrop(event) {
+    super.onyoghurtdrop(event);
+
+    this.status.shape = null;
+
+    if (this.dir[1] !== `l`) this.parent.status.locked.x = false;
+    if (this.dir[0] !== `t`) this.parent.status.locked.y = false;
   }
 
   onyoghurtselected(event) {
-    if (yoghurt.debug?.verbose) console.debug(event);
+    if (yoghurt.log?.verbose) console.log(event);
 
-    this.parent.yoghurt.appendChild(this.element);
+    this.parent.yoghurt.appendChild(this.yoghurt);
   }
 
   onyoghurtunselected(event) {
-    if (yoghurt.debug?.verbose) console.debug(event);
+    if (yoghurt.log?.verbose) console.log(event);
 
-    this.parent.yoghurt.removeChild(this.element);
+    this.parent.yoghurt.removeChild(this.yoghurt);
   }
 };
 
-yoghurt.Yoghurt.Element = class extends yoghurt.Yoghurt {
-
+yoghurt.Type.Yoghurt.Element = class extends yoghurt.Type.Yoghurt {
   constructor(element) {
     super(element);
 
+    this.element.prepend(this.yoghurt);
+
     this.yoghurt.classList.add(`yoghurt-element`);
 
-    // this.adjuster = [`tl`, `tm`, `tr`, `ml`, `mr`, `bl`, `bm`, `br`].map(
-    //   (dir) => new yoghurt.Yoghurt.Adjuster(this, dir)
-    // );
+    this.adjusters = [`tl`, `tm`, `tr`, `ml`, `mr`, `bl`, `bm`, `br`]
+      .map((dir) => new yoghurt.Type.Yoghurt.Adjuster(this, dir));
 
-    this.listen(`dragstart`);
-    this.listen(`drag`);
-    this.listen(`dragend`);
     this.status.position = null;
+    this.status.locked = { x: false, y: false };
 
     this.listen(`yoghurtselected`);
     this.listen(`yoghurtunselected`);
@@ -266,53 +324,47 @@ yoghurt.Yoghurt.Element = class extends yoghurt.Yoghurt {
   }
 
   destructor() {
-    this.unlisten(`yoghurtundragged`);
-    this.unlisten(`yoghurtdragged`);
     this.unlisten(`yoghurtunselected`);
     this.unlisten(`yoghurtselected`);
 
     super.destructor();
   }
 
-  ondragstart(event) {
-    if (yoghurt.debug) console.debug(this, event);
+  onmousedown(event) {
+    super.onmousedown(event);
 
-    this.status.position = {
-      dx: parseFloat(this.get(`left`)) - event.pageX,
-      dy: parseFloat(this.get(`top`)) - event.pageY
-    };
+    event.stopPropagation();
+    event.preventDefault();
 
-    this.element.dispatchEvent(new yoghurt.Event.Select(!this.status.selected));
-
+    this.yoghurt.dispatchEvent(new yoghurt.Event.Select(!this.status.selected));
   }
 
-  ondrag(event) {
-    if (yoghurt.debug) console.debug(this, event);
+  onyoghurtpick(event) {
+    super.onyoghurtpick(event);
 
-    const x = + event.pageX + this.status.position.dx;
-    this.set(`left`, x);
+    this.status.position = { x: parseFloat(this.get(`left`)), y: parseFloat(this.get(`top`)) };
+  }
 
-    const y = + event.pageY + this.status.position.dy;
-    this.set(`top`, y);
+  onyoghurtdrag(event) {
+    super.onyoghurtdrag(event);
 
-    this.element.dispatchEvent(new yoghurt.Event.Move(x, y));
+    const x = this.status.position.x + event.detail.dx;
+    const y = this.status.position.y + event.detail.dy;
+    if (!this.status.locked.x) this.set(`left`, x);
+    if (!this.status.locked.y) this.set(`top`, y);
 
     if (this.status.selected)
-      this.element.dispatchEvent(new yoghurt.Event.Select(false));
-
-    event.preventDefault();
+      this.yoghurt.dispatchEvent(new yoghurt.Event.Select(false));
   }
 
-  ondragend(event) {
-    if (yoghurt.debug) console.debug(this, event);
+  onyoghurtdrop(event) {
+    super.onyoghurtdrop(event);
 
-    this.status.position = null;
-
-    event.preventDefault();
+    this.yoghurt.dispatchEvent(new yoghurt.Event.Select(true));
   }
 
   onyoghurtselected(event) {
-    if (yoghurt.debug) console.debug(this, event);
+    if (yoghurt.log) console.log(this, event);
 
     console.assert(!this.status.selected);
     this.status.selected = true;
@@ -321,7 +373,7 @@ yoghurt.Yoghurt.Element = class extends yoghurt.Yoghurt {
   }
 
   onyoghurtunselected(event) {
-    if (yoghurt.debug) console.debug(this, event);
+    if (yoghurt.log) console.log(this, event);
 
     console.assert(this.status.selected);
     this.status.selected = false;
@@ -330,13 +382,3 @@ yoghurt.Yoghurt.Element = class extends yoghurt.Yoghurt {
   }
 
 };
-
-yoghurt.Yoghurt.Element.Text = class extends yoghurt.Yoghurt.Element { };
-
-/* -------------------------------------------------------------------------- */
-/*                                    TEST                                    */
-/* -------------------------------------------------------------------------- */
-
-yoghurt.debug = true;
-setTimeout(() => yoghurt.enter(), 1000);
-// setTimeout(() => yoghurt.leave(), 2000);
