@@ -9,14 +9,11 @@ setTimeout(() => console.timeEnd(`Yoghurt load `));
 
 var yoghurt = Object.create(window.yoghurt ?? null);
 
-yoghurt.log ??= false;
-yoghurt.debug ??= false;
-yoghurt.magnet ??= 7.0;
+yoghurt.log ??= false;                // logging level
+yoghurt.debug ??= false;              // debugging level
+yoghurt.magnet ??= 7.0;               // magnet attach level
 
-yoghurt.yoghurts = new Map();
-yoghurt.observer = new MutationObserver((mutations) =>
-  mutations.forEach(({ target, addedNodes, removedNodes }) => { })
-);
+yoghurt.yoghurts = new Map();         // map from element to yoghurt instance
 
 /* -------------------------------------------------------------------------- */
 /*                                    INIT                                    */
@@ -30,6 +27,14 @@ window.addEventListener(`load`, (event) => {
 /*                                     API                                    */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Take an element into control. Construct corresponding yoghurt instance and
+ * register the mapping. Assert the mapping is one-to-one and element type is
+ * well known.
+ * @param {HTMLElement} element - target element
+ * 
+ * @return constructed yoghurt instance
+ */
 yoghurt.take = function (element) {
   if (!yoghurt.yoghurts.has(element))
     switch (element.nodeName) {
@@ -43,17 +48,32 @@ yoghurt.take = function (element) {
   return yoghurt.yoghurts.get(element);
 };
 
+/**
+ * Drop an element. Destruct its controlling yoghurt instance and unregister
+ * the mapping. Assert the element has been registered before.
+ * @param {HTMLElement} element - target element
+ */
 yoghurt.drop = function (element) {
   if (yoghurt.yoghurts.has(element))
-    return yoghurt.yoghurts.get(element).destructor();
+    yoghurt.yoghurts.get(element).destructor();
 
-  if (yoghurt.debug) debugger;
+  else if (yoghurt.debug) debugger;
 };
 
+/**
+ * Take all elements under subtree of `element`.
+ * @param {HTMLElement} element - target subtree root, default to `document.body`
+ *
+ * @return array of all constructed yoghurt instance
+ */
 yoghurt.enter = function (element = document.body) {
-  element.querySelectorAll(`*`).forEach((node) => yoghurt.take(node));
+  return Array.from(element.querySelectorAll(`*`)).map((node) => yoghurt.take(node));
 };
 
+/**
+ * Drop all elements under subtree of `element`.
+ * @param {HTMLElement} element - target subtree root, default to `document.body`
+ */
 yoghurt.leave = function (element = document.body) {
   element.querySelectorAll(`*`).forEach((node) => yoghurt.drop(node));
 };
@@ -65,24 +85,36 @@ yoghurt.leave = function (element = document.body) {
 yoghurt.Event = class extends CustomEvent { };
 
 yoghurt.Event.Pick = class extends yoghurt.Event {
+  /**
+   * @event Element is pressed and dragged once.
+   */
   constructor() {
     super(`yoghurtpick`);
   }
 }
 
 yoghurt.Event.Drag = class extends yoghurt.Event {
+  /**
+   * @event Element is dragged. Provide horizontal and vertical movement.
+   */
   constructor(dx, dy) {
     super(`yoghurtdrag`, { detail: { dx, dy } });
   }
 }
 
 yoghurt.Event.Drop = class extends yoghurt.Event {
+  /**
+  * @event Element is dragged and released. Provide the element being dropped on.
+  */
   constructor(target) {
     super(`yoghurtdrop`, { detail: { target } });
   }
 }
 
 yoghurt.Event.Select = class extends yoghurt.Event {
+  /**
+ * @event Element focus state changed. Provide if the element is being selected.
+ */
   constructor(selected) {
     super(`yoghurt${selected ? `` : `un`}selected`);
   }
@@ -93,10 +125,44 @@ yoghurt.Event.Select = class extends yoghurt.Event {
 /* -------------------------------------------------------------------------- */
 
 yoghurt.Type = class {
+  /**
+   * @class Base class. Provide common element manipulations.
+   */
+  constructor(element) {
+    this.element = element;
+
+    this.listener = new Map();
+
+    this.status = new Object();
+  }
+
+  /**
+   * Base destructor. Ensures no memory and event leak.
+   */
+  destructor() {
+    delete this.status;
+
+    console.assert(this.listener.size === 0);
+    delete this.listener;
+
+    delete this.element;
+  }
+
+  /**
+   * Get computed style of `this.element`.
+   * @param {string} name - name of the style
+   * 
+   * @return {string} computed `name` style
+   */
   get(name) {
     return window.getComputedStyle(this.element).getPropertyValue(name);
   }
 
+  /**
+   * Set style of `this.element`. Convert the unit to currently used.
+   * @param {string} name - name of the style
+   * @param {number|string} value - value of the style
+   */
   set(name, value) {
     switch (typeof value) {
       case `number`:
@@ -124,6 +190,12 @@ yoghurt.Type = class {
     }
   }
 
+  /**
+   * Listen to event `type` on `element`, with corresponding class method as
+   * listener. Assert no same listener exists and register it.
+   * @param {string} type - name of event to be listened
+   * @param {HTMLElement} element - target element to be listened on
+   */
   listen(type, element) {
     console.assert(!this.listener.has(type), arguments);
 
@@ -133,6 +205,12 @@ yoghurt.Type = class {
     this.listener.set(type, listener);
   }
 
+  /**
+   * Unlisten previously listened event `type` on `element`. Assert same
+   * listener exists and unregister it.
+   * @param {string} type - name of event being listened
+   * @param {HTMLElement} element - target element to being listened on
+   */
   unlisten(type, element) {
     console.assert(this.listener.has(type), arguments);
 
@@ -141,48 +219,43 @@ yoghurt.Type = class {
 
     this.listener.delete(type);
   }
-
-  constructor(element) {
-    this.element = element;
-
-    this.listener = new Map();
-
-    this.status = new Object();
-  }
-
-  destructor() {
-    delete this.status;
-
-    console.assert(this.listener.size === 0);
-    delete this.listener;
-
-    delete this.element;
-  }
 };
 
 yoghurt.Type.Document = class extends yoghurt.Type {
+  /**
+   * @class Current document. Provide global event handling.
+   */
   constructor(element) {
     super(element);
 
     this.listen(`mousedown`, document);
   }
 
+  /**
+   * Sub destructor.
+   */
   destructor() {
     this.unlisten(`mousedown`, document);
 
     super.destructor();
   }
 
+  /**
+   * Base listener of `mousedown` event. Unselect all selected yoghurts.
+   * @param {Event} event
+   */
   onmousedown(event) {
     if (yoghurt.log) console.log(this, event);
 
-    yoghurt.yoghurts.forEach((self) =>
-      self.status.selected && self.status.mouse === null &&
+    yoghurt.yoghurts.forEach((self) => self.status.selected &&
       self.yoghurt.dispatchEvent(new yoghurt.Event.Select(false)));
   }
 };
 
 yoghurt.Type.Yoghurt = class extends yoghurt.Type {
+  /**
+   * @class Element entity. Abstract basic mouse interactions.
+   */
   constructor(element) {
     super(element);
 
@@ -199,6 +272,9 @@ yoghurt.Type.Yoghurt = class extends yoghurt.Type {
     this.status.dragged = false;
   }
 
+  /**
+   * Sub destructor.
+   */
   destructor() {
     this.unlisten(`yoghurtpick`, this.yoghurt);
     this.unlisten(`yoghurtdrag`, this.yoghurt);
@@ -213,6 +289,11 @@ yoghurt.Type.Yoghurt = class extends yoghurt.Type {
     super.destructor();
   }
 
+  /**
+   * Listener of `mousedown` event. Record current mouse position and
+   * listen on `mousemove` and `mouseup` events.
+   * @param {Event} event
+   */
   onmousedown(event) {
     if (this.status.mouse == null) {
 
@@ -229,6 +310,12 @@ yoghurt.Type.Yoghurt = class extends yoghurt.Type {
       this.onmouseup(event);
   }
 
+  /**
+   * Listener of `mousemove` event. Record mouse position movement and
+   * dispatch `yoghurtdrag` event. If it is first time dragging, dispatch
+   * `yoghurtpick` event.
+   * @param {Event} event
+   */
   onmousemove(event) {
     if (yoghurt.log?.verbose) console.log(this, event);
 
@@ -240,6 +327,12 @@ yoghurt.Type.Yoghurt = class extends yoghurt.Type {
     this.yoghurt.dispatchEvent(new yoghurt.Event.Drag(dx, dy));
   }
 
+  /**
+   * Listener of `mouseup` event. Clear mouse position information.
+   * If the element has been dragged since `mousedown`, acquire the
+   * element it is dropped on and dispatch `yoghurtdrop` event.
+   * @param {Event} event
+   */
   onmouseup(event) {
     if (yoghurt.log) console.log(this, event);
 
@@ -253,16 +346,28 @@ yoghurt.Type.Yoghurt = class extends yoghurt.Type {
     }
   }
 
+  /**
+   * Listener for `yoghurtpick` event.
+   * @param {Event} event
+   */
   onyoghurtpick(event) {
     if (yoghurt.log) console.log(this, event);
 
     this.status.dragged = true;
   }
 
+  /**
+   * Listener for `yoghurtdrag` event.
+   * @param {Event} event
+   */
   onyoghurtdrag(event) {
     if (yoghurt.log?.verbose) console.log(this, event);
   }
 
+  /**
+   * Listener for `yoghurtdrop` event.
+   * @param {Event} event
+   */
   onyoghurtdrop(event) {
     if (yoghurt.log) console.log(this, event);
 
@@ -271,6 +376,9 @@ yoghurt.Type.Yoghurt = class extends yoghurt.Type {
 }
 
 yoghurt.Type.Yoghurt.Adjuster = class extends yoghurt.Type.Yoghurt {
+  /**
+   * @class Element adjuster. Resize parent element with mouse dragging.
+   */
   constructor(parent, dir) {
     super(parent.yoghurt);
 
@@ -283,12 +391,19 @@ yoghurt.Type.Yoghurt.Adjuster = class extends yoghurt.Type.Yoghurt {
     this.status.fixed = { x: false, y: false };
   }
 
+  /**
+   * Sub destructor.
+   */
   destructor() {
     delete this.parent;
 
     super.destructor();
   }
 
+  /**
+   * Sub listener of `yoghurtpick` event. Record the current parent shape.
+   * @param {Event} event
+   */
   onyoghurtpick(event) {
     super.onyoghurtpick(event);
 
@@ -297,6 +412,11 @@ yoghurt.Type.Yoghurt.Adjuster = class extends yoghurt.Type.Yoghurt {
     [this.status.shape.locked, this.parent.status.locked] = [this.parent.status.locked, this.status.shape.locked];
   }
 
+  /**
+   * Sub listener of `yoghurtdrag` event. Resize parent according to mouse
+   * movement and direction of this adjuster.
+   * @param {Event} event
+   */
   onyoghurtdrag(event) {
     super.onyoghurtdrag(event);
 
@@ -309,6 +429,10 @@ yoghurt.Type.Yoghurt.Adjuster = class extends yoghurt.Type.Yoghurt {
     if (!this.status.fixed.y) this.parent.set(`height`, h);
   }
 
+  /**
+   * Sub listener of `yoghurtdrop` event. Clear parent shape information.
+   * @param {Event} event
+   */
   onyoghurtdrop(event) {
     super.onyoghurtdrop(event);
 
@@ -318,6 +442,9 @@ yoghurt.Type.Yoghurt.Adjuster = class extends yoghurt.Type.Yoghurt {
 };
 
 yoghurt.Type.Yoghurt.Element = class extends yoghurt.Type.Yoghurt {
+  /**
+   * @class Controlled element. Select and move element with mouse.
+   */
   constructor(element) {
     super(element);
 
@@ -333,6 +460,9 @@ yoghurt.Type.Yoghurt.Element = class extends yoghurt.Type.Yoghurt {
     this.status.selected = false;
   }
 
+  /**
+   * Sub destructor.
+   */
   destructor() {
     this.unlisten(`yoghurtunselected`, this.yoghurt);
     this.unlisten(`yoghurtselected`, this.yoghurt);
@@ -340,6 +470,12 @@ yoghurt.Type.Yoghurt.Element = class extends yoghurt.Type.Yoghurt {
     super.destructor();
   }
 
+  /**
+   * Sub listener of `mousedown` event. Dispatch `yoghurt[un]select` event to
+   * inversed select the element and pervent this event from being propagated
+   * to sup element.
+   * @param {Event} event
+   */
   onmousedown(event) {
     super.onmousedown(event);
 
@@ -350,12 +486,21 @@ yoghurt.Type.Yoghurt.Element = class extends yoghurt.Type.Yoghurt {
     event.stopPropagation();
   }
 
+  /**
+   * Sub listener of `yoghurtpick` event. Record current element position.
+   * @param {Event} event
+   */
   onyoghurtpick(event) {
     super.onyoghurtpick(event);
 
     this.status.position = { x: parseFloat(this.get(`left`)), y: parseFloat(this.get(`top`)) };
   }
 
+  /**
+   * Sub listener of `yoghurtdrag` event. Move the element according to mouse
+   * movement and dispatch `yoghurtunselect` event.
+   * @param {Event} event
+   */
   onyoghurtdrag(event) {
     super.onyoghurtdrag(event);
 
@@ -368,12 +513,20 @@ yoghurt.Type.Yoghurt.Element = class extends yoghurt.Type.Yoghurt {
       this.yoghurt.dispatchEvent(new yoghurt.Event.Select(false));
   }
 
+  /**
+   * Sub listener of `yoghurtdrop` event. Dispatch `yoghurtselected` event.
+   * @param {Event} event
+   */
   onyoghurtdrop(event) {
     super.onyoghurtdrop(event);
 
     this.yoghurt.dispatchEvent(new yoghurt.Event.Select(true));
   }
 
+  /**
+   * Listener of `yoghurtselected` event. Change border color to primary blue.
+   * @param {Event} event
+   */
   onyoghurtselected(event) {
     if (yoghurt.log) console.log(this, event);
 
@@ -383,6 +536,10 @@ yoghurt.Type.Yoghurt.Element = class extends yoghurt.Type.Yoghurt {
     this.yoghurt.style.setProperty(`border-color`, `var(--color-primary-blue)`);
   }
 
+  /**
+   * Listener of `yoghurtunselected` event. Change border color to secondary.
+   * @param {Event} event
+   */
   onyoghurtunselected(event) {
     if (yoghurt.log) console.log(this, event);
 
@@ -394,6 +551,9 @@ yoghurt.Type.Yoghurt.Element = class extends yoghurt.Type.Yoghurt {
 };
 
 yoghurt.Type.Yoghurt.Element.Adjustable = class extends yoghurt.Type.Yoghurt.Element {
+  /**
+   * @class Resizable controlled element. Resize element by adjusters.
+   */
   constructor(element) {
     super(element);
 
@@ -401,18 +561,29 @@ yoghurt.Type.Yoghurt.Element.Adjustable = class extends yoghurt.Type.Yoghurt.Ele
       .map((dir) => new yoghurt.Type.Yoghurt.Adjuster(this, dir));
   }
 
+  /**
+ * Sub destructor.
+ */
   destructor() {
     delete this.adjusters;
 
     super.destructor();
   }
 
+  /**
+   * Sub listener of `yoghurtselected` event. Show all adjusters.
+   * @param {Event} event
+   */
   onyoghurtselected(event) {
     super.onyoghurtselected(event);
 
     this.adjusters.forEach((adjuster) => this.yoghurt.appendChild(adjuster.yoghurt));
   }
 
+  /**
+   * Sub listener of `yoghurtselected` event. Hide all adjusters.
+   * @param {Event} event
+   */
   onyoghurtunselected(event) {
     super.onyoghurtunselected(event);
 
