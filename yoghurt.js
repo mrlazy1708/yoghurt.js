@@ -23,7 +23,7 @@ yoghurt.observer = new MutationObserver((mutations) =>
 /* -------------------------------------------------------------------------- */
 
 window.addEventListener(`load`, (event) => {
-  yoghurt.observer.observe(document.body, { childList: true, subtree: true });
+  yoghurt.document = new yoghurt.Type.Document(document);
 });
 
 /* -------------------------------------------------------------------------- */
@@ -32,9 +32,9 @@ window.addEventListener(`load`, (event) => {
 
 yoghurt.take = function (element) {
   if (!yoghurt.yoghurts.has(element))
-    switch (element.tagName) {
+    switch (element.nodeName) {
       case `DIV`:
-        return new yoghurt.Type.Yoghurt.Element(element);
+        return new yoghurt.Type.Yoghurt.Element.Adjustable(element);
 
       default: return;
     }
@@ -124,7 +124,7 @@ yoghurt.Type = class {
     }
   }
 
-  listen(type, element = this.yoghurt) {
+  listen(type, element) {
     console.assert(!this.listener.has(type), arguments);
 
     const listener = this[`on${type}`].bind(this);
@@ -133,7 +133,7 @@ yoghurt.Type = class {
     this.listener.set(type, listener);
   }
 
-  unlisten(type, element = this.yoghurt) {
+  unlisten(type, element) {
     console.assert(this.listener.has(type), arguments);
 
     const listener = this.listener.get(type);
@@ -144,7 +144,6 @@ yoghurt.Type = class {
 
   constructor(element) {
     this.element = element;
-    yoghurt.yoghurts.set(element, this);
 
     this.listener = new Map();
 
@@ -157,8 +156,29 @@ yoghurt.Type = class {
     console.assert(this.listener.size === 0);
     delete this.listener;
 
-    yoghurt.yoghurts.delete(this.element);
     delete this.element;
+  }
+};
+
+yoghurt.Type.Document = class extends yoghurt.Type {
+  constructor(element) {
+    super(element);
+
+    this.listen(`mousedown`, document);
+  }
+
+  destructor() {
+    this.unlisten(`mousedown`, document);
+
+    super.destructor();
+  }
+
+  onmousedown(event) {
+    if (yoghurt.log) console.log(this, event);
+
+    yoghurt.yoghurts.forEach((self) =>
+      self.status.selected && self.status.mouse === null &&
+      self.yoghurt.dispatchEvent(new yoghurt.Event.Select(false)));
   }
 };
 
@@ -168,19 +188,25 @@ yoghurt.Type.Yoghurt = class extends yoghurt.Type {
 
     this.yoghurt = document.createElement(`div`);
     this.yoghurt.classList.add(`yoghurt`);
+    yoghurt.yoghurts.set(element, this);
 
-    this.listen(`mousedown`);
+    this.listen(`mousedown`, this.yoghurt);
     this.status.mouse = null;
 
-    this.listen(`yoghurtpick`);
-    this.listen(`yoghurtdrag`);
-    this.listen(`yoghurtdrop`);
+    this.listen(`yoghurtpick`, this.yoghurt);
+    this.listen(`yoghurtdrag`, this.yoghurt);
+    this.listen(`yoghurtdrop`, this.yoghurt);
     this.status.dragged = false;
   }
 
   destructor() {
-    this.unlisten(`mousedown`);
+    this.unlisten(`yoghurtpick`, this.yoghurt);
+    this.unlisten(`yoghurtdrag`, this.yoghurt);
+    this.unlisten(`yoghurtdrop`, this.yoghurt);
 
+    this.unlisten(`mousedown`, this.yoghurt);
+
+    yoghurt.yoghurts.delete(this.element);
     this.element.removeChild(this.yoghurt);
     delete this.yoghurt;
 
@@ -188,11 +214,19 @@ yoghurt.Type.Yoghurt = class extends yoghurt.Type {
   }
 
   onmousedown(event) {
-    if (yoghurt.log) console.log(this, event);
+    if (this.status.mouse == null) {
 
-    this.listen(`mousemove`, document);
-    this.listen(`mouseup`, document);
-    this.status.mouse = { x: event.pageX, y: event.pageY };
+      if (yoghurt.log) console.log(this, event);
+
+      this.listen(`mousemove`, document);
+      this.listen(`mouseup`, document);
+      this.status.mouse = { x: event.pageX, y: event.pageY };
+
+      event.preventDefault();
+
+    } else
+
+      this.onmouseup(event);
   }
 
   onmousemove(event) {
@@ -245,17 +279,11 @@ yoghurt.Type.Yoghurt.Adjuster = class extends yoghurt.Type.Yoghurt {
 
     this.yoghurt.classList.add(`yoghurt-adjuster`, `yoghurt-adjuster-${dir}`);
 
-    this.listen(`yoghurtselected`, this.parent.yoghurt);
-    this.listen(`yoghurtunselected`, this.parent.yoghurt);
-
     this.status.shape = null;
     this.status.fixed = { x: false, y: false };
   }
 
   destructor() {
-    this.unlisten(`yoghurtselected`, this.parent.yoghurt);
-    this.unlisten(`yoghurtunselected`, this.parent.yoghurt);
-
     delete this.parent;
 
     super.destructor();
@@ -264,10 +292,9 @@ yoghurt.Type.Yoghurt.Adjuster = class extends yoghurt.Type.Yoghurt {
   onyoghurtpick(event) {
     super.onyoghurtpick(event);
 
-    this.status.shape = { w: parseFloat(this.parent.get(`width`)), h: parseFloat(this.parent.get(`height`)) };
-
-    if (this.dir[1] !== `l`) this.parent.status.locked.x = true;
-    if (this.dir[0] !== `t`) this.parent.status.locked.y = true;
+    const locked = { x: this.dir[1] !== `l`, y: this.dir[0] !== `t` };
+    this.status.shape = { w: parseFloat(this.parent.get(`width`)), h: parseFloat(this.parent.get(`height`)), locked };
+    [this.status.shape.locked, this.parent.status.locked] = [this.parent.status.locked, this.status.shape.locked];
   }
 
   onyoghurtdrag(event) {
@@ -285,22 +312,8 @@ yoghurt.Type.Yoghurt.Adjuster = class extends yoghurt.Type.Yoghurt {
   onyoghurtdrop(event) {
     super.onyoghurtdrop(event);
 
+    this.parent.status.locked = this.status.shape.locked;
     this.status.shape = null;
-
-    if (this.dir[1] !== `l`) this.parent.status.locked.x = false;
-    if (this.dir[0] !== `t`) this.parent.status.locked.y = false;
-  }
-
-  onyoghurtselected(event) {
-    if (yoghurt.log?.verbose) console.log(event);
-
-    this.parent.yoghurt.appendChild(this.yoghurt);
-  }
-
-  onyoghurtunselected(event) {
-    if (yoghurt.log?.verbose) console.log(event);
-
-    this.parent.yoghurt.removeChild(this.yoghurt);
   }
 };
 
@@ -312,20 +325,17 @@ yoghurt.Type.Yoghurt.Element = class extends yoghurt.Type.Yoghurt {
 
     this.yoghurt.classList.add(`yoghurt-element`);
 
-    this.adjusters = [`tl`, `tm`, `tr`, `ml`, `mr`, `bl`, `bm`, `br`]
-      .map((dir) => new yoghurt.Type.Yoghurt.Adjuster(this, dir));
-
     this.status.position = null;
     this.status.locked = { x: false, y: false };
 
-    this.listen(`yoghurtselected`);
-    this.listen(`yoghurtunselected`);
+    this.listen(`yoghurtselected`, this.yoghurt);
+    this.listen(`yoghurtunselected`, this.yoghurt);
     this.status.selected = false;
   }
 
   destructor() {
-    this.unlisten(`yoghurtunselected`);
-    this.unlisten(`yoghurtselected`);
+    this.unlisten(`yoghurtunselected`, this.yoghurt);
+    this.unlisten(`yoghurtselected`, this.yoghurt);
 
     super.destructor();
   }
@@ -333,10 +343,11 @@ yoghurt.Type.Yoghurt.Element = class extends yoghurt.Type.Yoghurt {
   onmousedown(event) {
     super.onmousedown(event);
 
-    event.stopPropagation();
-    event.preventDefault();
+    yoghurt.document.onmousedown(event);
 
     this.yoghurt.dispatchEvent(new yoghurt.Event.Select(!this.status.selected));
+
+    event.stopPropagation();
   }
 
   onyoghurtpick(event) {
@@ -380,5 +391,31 @@ yoghurt.Type.Yoghurt.Element = class extends yoghurt.Type.Yoghurt {
 
     this.yoghurt.style.setProperty(`border-color`, `var(--color-secondary)`);
   }
+};
 
+yoghurt.Type.Yoghurt.Element.Adjustable = class extends yoghurt.Type.Yoghurt.Element {
+  constructor(element) {
+    super(element);
+
+    this.adjusters = [`tl`, `tm`, `tr`, `ml`, `mr`, `bl`, `bm`, `br`]
+      .map((dir) => new yoghurt.Type.Yoghurt.Adjuster(this, dir));
+  }
+
+  destructor() {
+    delete this.adjusters;
+
+    super.destructor();
+  }
+
+  onyoghurtselected(event) {
+    super.onyoghurtselected(event);
+
+    this.adjusters.forEach((adjuster) => this.yoghurt.appendChild(adjuster.yoghurt));
+  }
+
+  onyoghurtunselected(event) {
+    super.onyoghurtunselected(event);
+
+    this.adjusters.forEach((adjuster) => this.yoghurt.removeChild(adjuster.yoghurt));
+  }
 };
