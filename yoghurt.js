@@ -14,13 +14,14 @@ yoghurt.debug ??= false;              // debugging level
 yoghurt.magnet ??= 7.0;               // magnet attach level
 
 yoghurt.yoghurts = new Map();         // map from element to yoghurt instance
+yoghurt.clipboard = new Array();      // copy & paste cache array
 
 /* -------------------------------------------------------------------------- */
 /*                                    INIT                                    */
 /* -------------------------------------------------------------------------- */
 
 window.addEventListener(`load`, (event) => {
-  yoghurt.document = new yoghurt.Type.Document(document);
+  yoghurt.document = new yoghurt.Type.Document(document.body);
 });
 
 /* -------------------------------------------------------------------------- */
@@ -36,6 +37,8 @@ window.addEventListener(`load`, (event) => {
  * @return constructed yoghurt instance
  */
 yoghurt.take = function (element) {
+  if (yoghurt.log) console.log(`take`, element);
+
   if (!yoghurt.yoghurts.has(element))
     switch (element.nodeName) {
       case `DIV`:
@@ -54,6 +57,8 @@ yoghurt.take = function (element) {
  * @param {HTMLElement} element - target element
  */
 yoghurt.drop = function (element) {
+  if (yoghurt.log) console.log(`drop`, element);
+
   if (yoghurt.yoghurts.has(element))
     yoghurt.yoghurts.get(element).destructor();
 
@@ -67,7 +72,10 @@ yoghurt.drop = function (element) {
  * @return array of all constructed yoghurt instance
  */
 yoghurt.enter = function (element = document.body) {
-  return Array.from(element.querySelectorAll(`*`)).map((node) => yoghurt.take(node));
+  if (yoghurt.log) console.log(`enter`, element);
+
+  return [element, ...element.querySelectorAll(`*`)].map((node) =>
+    yoghurt.take(node));
 };
 
 /**
@@ -75,8 +83,61 @@ yoghurt.enter = function (element = document.body) {
  * @param {HTMLElement} element - target subtree root, default to `document.body`
  */
 yoghurt.leave = function (element = document.body) {
-  element.querySelectorAll(`*`).forEach((node) => yoghurt.drop(node));
+  if (yoghurt.log) console.log(`leave`, element);
+
+  [element, ...element.querySelectorAll(`*`)].forEach((node) =>
+    yoghurt.yoghurts.has(node) && yoghurt.drop(node));
 };
+
+/* ---------------------------------- EDIT ---------------------------------- */
+
+/**
+ * Collect all registered yoghurts and filter by key-value status.
+ * @param {string} name - filtered status name.
+ * @param {*} status - expected status value.
+ * @return {[*]} all filtered yoghurts on element.
+ */
+yoghurt.element = function (name, status = name && true) {
+  return [...yoghurt.yoghurts.values()]
+    .filter((self) => self instanceof yoghurt.Type.Yoghurt.Element)
+    .filter((self) => self.status[name] === status);
+}
+
+/**
+ * Destory all selected subtree and put element onto clipboard.
+ * @param {[*]} yoghurts - array of subtree.
+ */
+yoghurt.clip = function (yoghurts = yoghurt.element(`selected`)) {
+  if (yoghurt.log) console.log(`clip`, yoghurts);
+
+  yoghurt.clipboard = yoghurts.map(({ element }) =>
+    (yoghurt.leave(element), element.remove(), element));
+};
+
+/**
+ * Append each element on clipboard to all selected yoghurts and control it.
+ * If nothing is selected, paste on `document.body`.
+ * @param {[*]} yoghurts - array of yoghurt.
+ */
+yoghurt.paste = function (yoghurts = yoghurt.element(`selected`)) {
+  if (yoghurt.log) console.log(`paste`, yoghurts);
+
+  if (yoghurts.length === 0) yoghurts = [yoghurt.document];
+  console.log(yoghurts, yoghurt.clipboard)
+
+  yoghurts.forEach(({ element }) => yoghurt.clipboard.forEach((child) =>
+    yoghurt.enter(element.appendChild(child.cloneNode(true)))));
+}
+
+/**
+ * Destory and remove each selected element yoghurt.
+ * @param {[*]} yoghurts - array of yoghurt.
+ */
+yoghurt.delete = function (yoghurts = yoghurt.element(`selected`)) {
+  if (yoghurt.log) console.log(`delete`, yoghurts);
+
+  yoghurts.forEach(({ element }) => { yoghurt.leave(element), element.remove() });
+}
 
 /* -------------------------------------------------------------------------- */
 /*                                    EVENT                                   */
@@ -229,6 +290,7 @@ yoghurt.Type.Document = class extends yoghurt.Type {
     super(element);
 
     this.listen(`mousedown`, document);
+    this.listen(`keydown`, document);
   }
 
   /**
@@ -236,6 +298,7 @@ yoghurt.Type.Document = class extends yoghurt.Type {
    */
   destructor() {
     this.unlisten(`mousedown`, document);
+    this.unlisten(`keydown`, document);
 
     super.destructor();
   }
@@ -247,9 +310,25 @@ yoghurt.Type.Document = class extends yoghurt.Type {
   onmousedown(event) {
     if (yoghurt.log) console.log(this, event);
 
-    yoghurt.yoghurts.forEach((self) =>
-      self.status.selected && self.status.mouse === null &&
-      self.yoghurt.dispatchEvent(new yoghurt.Event.Select(false)));
+    yoghurt.element(`selected`).forEach((self) => self.status.mouse === null
+      && self.yoghurt.dispatchEvent(new yoghurt.Event.Select(false)));
+  }
+
+  /**
+   * Base listener of `keydown` event.
+   * - clip on `Ctrl-C`
+   * - paste on `Ctrl-V`
+   * - delete on `Backspace`
+   * @param {Event} event
+   */
+  onkeydown(event) {
+    if (yoghurt.log) console.log(this, event);
+
+    const auxKey = event.metaKey /* MacOS */ || event.ctrlKey /* Windows */;
+
+    if (event.key === `c` && auxKey) yoghurt.clip();
+    if (event.key === `v` && auxKey) yoghurt.paste();
+    if (event.key === `Backspace`) yoghurt.delete();
   }
 };
 
@@ -262,7 +341,6 @@ yoghurt.Type.Yoghurt = class extends yoghurt.Type {
 
     this.yoghurt = document.createElement(`div`);
     this.yoghurt.classList.add(`yoghurt`);
-    yoghurt.yoghurts.set(element, this);
 
     this.listen(`mousedown`, this.yoghurt);
     this.status.mouse = null;
@@ -283,8 +361,6 @@ yoghurt.Type.Yoghurt = class extends yoghurt.Type {
 
     this.unlisten(`mousedown`, this.yoghurt);
 
-    yoghurt.yoghurts.delete(this.element);
-    this.element.removeChild(this.yoghurt);
     delete this.yoghurt;
 
     super.destructor();
@@ -473,9 +549,9 @@ yoghurt.Type.Yoghurt.Element = class extends yoghurt.Type.Yoghurt {
   constructor(element) {
     super(element);
 
-    this.element.prepend(this.yoghurt);
-
     this.yoghurt.classList.add(`yoghurt-element`);
+    this.element.prepend(this.yoghurt);
+    yoghurt.yoghurts.set(this.element, this);
 
     this.status.position = null;
     this.status.locked = { x: false, y: false };
@@ -491,6 +567,9 @@ yoghurt.Type.Yoghurt.Element = class extends yoghurt.Type.Yoghurt {
   destructor() {
     this.unlisten(`yoghurtunselected`, this.yoghurt);
     this.unlisten(`yoghurtselected`, this.yoghurt);
+
+    this.element.removeChild(this.yoghurt);
+    yoghurt.yoghurts.delete(this.element);
 
     super.destructor();
   }
