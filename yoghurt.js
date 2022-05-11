@@ -562,8 +562,8 @@ yoghurt.Type.Yoghurt.Element.Adjustable = class extends yoghurt.Type.Yoghurt.Ele
   }
 
   /**
- * Sub destructor.
- */
+   * Sub destructor.
+   */
   destructor() {
     delete this.adjusters;
 
