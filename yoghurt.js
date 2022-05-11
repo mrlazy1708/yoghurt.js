@@ -450,7 +450,8 @@ yoghurt.Type.Yoghurt.Adjuster = class extends yoghurt.Type.Yoghurt {
   onyoghurtselected(event) {
     if (yoghurt.log?.verbose) console.log(this, event);
 
-    this.parent.yoghurt.appendChild(this.yoghurt);
+    if (this.status.mouse === null)
+      this.parent.yoghurt.appendChild(this.yoghurt);
   }
 
   /**
@@ -460,7 +461,8 @@ yoghurt.Type.Yoghurt.Adjuster = class extends yoghurt.Type.Yoghurt {
   onyoghurtunselected(event) {
     if (yoghurt.log?.verbose) console.log(this, event);
 
-    this.parent.yoghurt.removeChild(this.yoghurt);
+    if (this.status.mouse === null)
+      this.parent.yoghurt.removeChild(this.yoghurt);
   }
 };
 
