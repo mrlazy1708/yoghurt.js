@@ -247,7 +247,8 @@ yoghurt.Type.Document = class extends yoghurt.Type {
   onmousedown(event) {
     if (yoghurt.log) console.log(this, event);
 
-    yoghurt.yoghurts.forEach((self) => self.status.selected &&
+    yoghurt.yoghurts.forEach((self) =>
+      self.status.selected && self.status.mouse === null &&
       self.yoghurt.dispatchEvent(new yoghurt.Event.Select(false)));
   }
 };
@@ -387,6 +388,8 @@ yoghurt.Type.Yoghurt.Adjuster = class extends yoghurt.Type.Yoghurt {
 
     this.yoghurt.classList.add(`yoghurt-adjuster`, `yoghurt-adjuster-${dir}`);
 
+    this.listen(`yoghurtselected`, this.parent.yoghurt);
+    this.listen(`yoghurtunselected`, this.parent.yoghurt);
     this.status.shape = null;
     this.status.fixed = { x: false, y: false };
   }
@@ -438,6 +441,26 @@ yoghurt.Type.Yoghurt.Adjuster = class extends yoghurt.Type.Yoghurt {
 
     this.parent.status.locked = this.status.shape.locked;
     this.status.shape = null;
+  }
+
+  /**
+   * Sub listener of `yoghurtselected` event. Show all adjusters.
+   * @param {Event} event
+   */
+  onyoghurtselected(event) {
+    if (yoghurt.log?.verbose) console.log(this, event);
+
+    this.parent.yoghurt.appendChild(this.yoghurt);
+  }
+
+  /**
+   * Sub listener of `yoghurtselected` event. Hide all adjusters.
+   * @param {Event} event
+   */
+  onyoghurtunselected(event) {
+    if (yoghurt.log?.verbose) console.log(this, event);
+
+    this.parent.yoghurt.removeChild(this.yoghurt);
   }
 };
 
@@ -568,25 +591,5 @@ yoghurt.Type.Yoghurt.Element.Adjustable = class extends yoghurt.Type.Yoghurt.Ele
     delete this.adjusters;
 
     super.destructor();
-  }
-
-  /**
-   * Sub listener of `yoghurtselected` event. Show all adjusters.
-   * @param {Event} event
-   */
-  onyoghurtselected(event) {
-    super.onyoghurtselected(event);
-
-    this.adjusters.forEach((adjuster) => this.yoghurt.appendChild(adjuster.yoghurt));
-  }
-
-  /**
-   * Sub listener of `yoghurtselected` event. Hide all adjusters.
-   * @param {Event} event
-   */
-  onyoghurtunselected(event) {
-    super.onyoghurtunselected(event);
-
-    this.adjusters.forEach((adjuster) => this.yoghurt.removeChild(adjuster.yoghurt));
   }
 };
